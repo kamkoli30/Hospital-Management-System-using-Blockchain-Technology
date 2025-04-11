@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Hospital Blockchain</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background-color: #f9f9f9;
+    }
+    h1 {
+      color: #2c3e50;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+    }
+    input, select, textarea, button {
+      padding: 8px;
+      margin-top: 5px;
+      width: 300px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+    button {
+      margin-top: 15px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+    }
+    .result {
+      margin-top: 20px;
+      color: green;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+</head>
+<body>
+  <h1>Hospital Management System</h1>
+
+  <label for="type">Register As:</label>
+  <select id="type" onchange="toggleFields()">
+    <option value="doctor">Doctor</option>
+    <option value="patient">Patient</option>
+  </select>
+
+  <label for="name">Name:</label>
+  <input type="text" id="name"/>
+
+  <label for="age">Age:</label>
+  <input type="number" id="age"/>
+
+  <!-- Doctor only -->
+  <div id="doctorFields" style="display:none;">
+    <label for="specialty">Specialty:</label>
+    <input type="text" id="specialty"/>
+  </div>
+
+  <!-- Patient only -->
+  <div id="patientFields" style="display:none;">
+    <label for="disease">Disease:</label>
+    <input type="text" id="disease"/>
+
+    <label for="prescription">Prescription:</label>
+    <textarea id="prescription" rows="2"></textarea>
+
+    <label for="medication">Medication:</label>
+    <textarea id="medication" rows="2"></textarea>
+  </div>
+
+  <button onclick="register()">Register</button>
+  <div class="result" id="result"></div>
+
+  <hr style="margin: 40px 0;">
+
+  <h2>Schedule Appointment</h2>
+
+  <label>Doctor:</label>
+  <select id="scheduleDoctor"></select>
+
+  <label>Patient:</label>
+  <select id="schedulePatient"></select>
+
+  <label>Date & Time:</label>
+  <input type="datetime-local" id="scheduleDateTime">
+
+  <label>Reason:</label>
+  <input type="text" id="scheduleReason">
+
+  <button onclick="scheduleAppointment()">Schedule</button>
+
+  <div class="result" id="scheduleResult"></div>
+
+  <hr style="margin: 40px 0;">
+
+  <h2>Records</h2>
+
+  <h3>Doctors:</h3>
+  <ul id="doctorList"></ul>
+
+  <h3>Patients:</h3>
+  <ul id="patientList"></ul>
+
+  <h3>Appointments:</h3>
+  <ul id="scheduleList"></ul>
+
+  <script>
+    let contract;
+    const contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+    const abi = [
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "index",
+				"type": "uint256"
+			}
+		],
+		"name": "AppointmentRemoved",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "doctor",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "patient",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "datetime",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "reason",
+				"type": "string"
+			}
+		],
+		"name": "AppointmentScheduled",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "appointments",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "doctor",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "patient",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "datetime",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "reason",
+				"type": "string"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "getAppointments",
+		"outputs": [
+			{
+				"components": [
+					{
+						"internalType": "string",
+						"name": "doctor",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "patient",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "datetime",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "reason",
+						"type": "string"
+					}
+				],
+				"internalType": "struct AppointmentManager.Appointment[]",
+				"name": "",
+				"type": "tuple[]"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "index",
+				"type": "uint256"
+			}
+		],
+		"name": "removeAppointment",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "doctor",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "patient",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "datetime",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "reason",
+				"type": "string"
+			}
+		],
+		"name": "scheduleAppointment",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	}
+];
+
+    async function connect() {
+      if (window.ethereum) {
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        await provider.send("eth_requestAccounts", []);
+        const signer = provider.getSigner();
+        contract = new ethers.Contract(contractAddress, abi, signer);
+        fetchBlockchainAppointments();
+      }
+    }
+
+    async function toggleFields() {
+      const type = document.getElementById('type').value;
+      document.getElementById('doctorFields').style.display = type === 'doctor' ? 'block' : 'none';
+      document.getElementById('patientFields').style.display = type === 'patient' ? 'block' : 'none';
+    }
+
+    async function fetchRecords() {
+      const res = await fetch('/records');
+      const data = await res.json();
+
+      const doctorList = document.getElementById('doctorList');
+      doctorList.innerHTML = '';
+      document.getElementById('scheduleDoctor').innerHTML = '';
+      data.doctors.forEach(doc => {
+        doctorList.innerHTML += `<li>${doc.name} (${doc.specialty})</li>`;
+        document.getElementById('scheduleDoctor').innerHTML += `<option value="${doc.name}">${doc.name}</option>`;
+      });
+
+      const patientList = document.getElementById('patientList');
+      patientList.innerHTML = '';
+      document.getElementById('schedulePatient').innerHTML = '';
+      data.patients.forEach(p => {
+        patientList.innerHTML += `<li>${p.name} (${p.disease})</li>`;
+        document.getElementById('schedulePatient').innerHTML += `<option value="${p.name}">${p.name}</option>`;
+      });
+    }
+
+    async function register() {
+      const type = document.getElementById("type").value;
+      const name = document.getElementById("name").value;
+      const age = document.getElementById("age").value;
+
+      const data = { type, name, age };
+
+      if (type === "doctor") {
+        data.specialty = document.getElementById("specialty").value;
+      } else {
+        data.disease = document.getElementById("disease").value;
+        data.prescription = document.getElementById("prescription").value;
+        data.medication = document.getElementById("medication").value;
+      }
+
+      const response = await fetch(`/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      const result = await response.json();
+      document.getElementById("result").innerText = result.message;
+      fetchRecords();
+    }
+
+    async function scheduleAppointment() {
+      const doctor = document.getElementById('scheduleDoctor').value;
+      const patient = document.getElementById('schedulePatient').value;
+      const datetime = document.getElementById('scheduleDateTime').value;
+      const reason = document.getElementById('scheduleReason').value;
+
+      try {
+        const tx = await contract.scheduleAppointment(doctor, patient, datetime, reason);
+        await tx.wait();
+        document.getElementById('scheduleResult').innerText = "Appointment stored on blockchain.";
+        fetchBlockchainAppointments();
+      } catch (error) {
+        console.error(error);
+        document.getElementById('scheduleResult').innerText = "Failed to store appointment.";
+      }
+    }
+
+    async function fetchBlockchainAppointments() {
+      if (!contract) return;
+      const appointments = await contract.getAppointments();
+      const scheduleList = document.getElementById("scheduleList");
+      scheduleList.innerHTML = '';
+      appointments.forEach(app => {
+        scheduleList.innerHTML += `<li>${app.datetime} - Dr. ${app.doctor} with ${app.patient} (${app.reason})</li>`;
+      });
+    }
+
+    async function removeAppointment(index) {
+    try {
+      const tx = await contract.removeAppointment(index);
+      await tx.wait();
+      alert("Appointment removed from blockchain.");
+      fetchBlockchainAppointments();
+    } catch (err) {
+      console.error("Error removing appointment:", err);
+      alert("Failed to remove appointment.");
+    }
+    }
+
+    window.onload = () => {
+      toggleFields();
+      fetchRecords();
+      connect();
+    };
+  </script>
+</body>
+</html>
